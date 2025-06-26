@@ -1,26 +1,57 @@
-#object file
+### SGX Build Artifacts ###
+# Object and binary files
 *.o
-
-#library
 *.a
-
-#share object
 *.so
 *.so.*
+*.signed.so
+*.bin
+*.enc
+app
 
-#generated proxy
+# Generated proxy/edge files
 *_u.c
 *_u.h
 *_t.c
 *_t.h
+Enclave/Enclave_t.*
+App/Enclave_u.*
 
-#output files
+### Security Sensitive Files ###
+# Keys and certificates
+*.pem
+*.key
+*.der
+*.csr
+*.crt
+*.pub
+debug_mock_key.bin
+sealed_data.bin
+
+### Development Artifacts ###
+# Build directories
 /build/
-/linux/installer/bin/*.bin
+/Debug/
+/Release/
+/x64/
+/out/
+*.tmp
+*.swp
+*.log
+*.t
+.vscode/
+.idea/
 
-# files downloaded in preparation phase
+### SGX SDK/PSW Specific ###
+# Auto-generated files
+buildenv.mk
+redist.txt
 BSD-3-Clause.txt
 Master_EULA_for_Intel_Sw_Development_Products.pdf
+
+### Reproducibility and External Dependencies ###
+linux/reproducibility/code_dir/
+linux/installer/bin/*.bin
 external/ippcp_internal/inc/ippcp.h
 external/ippcp_internal/inc/ippcpdefs.h
 external/ippcp_internal/inc/ippversion.h
@@ -28,8 +59,16 @@ external/ippcp_internal/inc/sgx_ippcp.h
 external/ippcp_internal/license/
 external/toolset/
 psw/ae/data/prebuilt/README.md
-redist.txt
 
-# directory created when running reproducibility scripts
-linux/reproducibility/code_dir/
+### Document Processing System Specific ###
+# Encrypted/processed documents
+*.encdoc
+*.securedoc
+/temp_documents/
+/staging/
 
+### IDE and Editor Files ###
+*.swp
+*~
+*.swo
+.DS_Store
