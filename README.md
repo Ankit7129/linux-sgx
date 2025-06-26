@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 
 
 Intel(R) Software Guard Extensions for Linux\* OS
@@ -550,3 +551,20 @@ Reproducibility
 -----------------------------------------
 Intel(R) SGX is providing several prebuilt binaries. All the prebuilt binaries are built from a reproducible environment in SGX docker container. To reproduce the prebuilt binaries, please follow the [reproducibility README.md](linux/reproducibility/README.md) to prepare the SGX docker container and build out the binaries you want to verify.
 Most of the binaries could be verified utilizing Linux system command `diff`, except Intel(R) AEs. Please refer to the [README.md](linux/reproducibility/ae_reproducibility_verifier/README.md) for how to verify the reproducibililty of the built out AEs.
+=======
+# Intel SGX Sample Setup on Azure DCsv3 VM
+
+This repository contains the Intel SGX SDK samples compiled and tested on an **Azure Confidential Computing DCsv3 VM**. It includes working examples like `SampleEnclave`, `SampleEnclavePCL`, and other enclave-based trusted applications.
+
+---
+
+## ✅ System Setup
+
+### 📦 Required Packages
+
+Update system and install dependencies:
+
+```bash
+sudo apt update && sudo apt upgrade
+sudo apt install build-essential ocaml automake autoconf libtool wget python3 libssl-dev dkms
+>>>>>>> 81133044fcf1b8e91d6dd451146f11b0de762089
