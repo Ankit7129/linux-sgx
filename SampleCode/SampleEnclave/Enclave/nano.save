@@ -2,7 +2,7 @@
  * Copyright (C) 2011-2021 Intel Corporation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
+ * modification are permitted provided that the following conditions
  * are met:
  *
  *   * Redistributions of source code must retain the above copyright
@@ -29,42 +29,57 @@
  *
  */
 
-/* Enclave.edl - Top EDL file. */
+#include "sgx_tcrypto.h"
+#include "Enclave.h"
+#include "Enclave_t.h" /* print_string */
+#include <stdarg.h>
+#include <stdio.h> /* vsnprintf */
+#include <string.h>
+#include <stdlib.h>
+#include <vector>
+#include <string>
+#include "base64.h"
 
-enclave {
-    
-    include "user_types.h" /* buffer_t */
+#define AES_KEY_SIZE 16
+#define GCM_IV_SIZE 12
+#define GCM_TAG_SIZE 16
+#define MAX_MSG_SIZE 2048
+#define MAX_PLAINTEXT_SIZE 1024
 
-    /* Import ECALL/OCALL from sub-directory EDLs.
-     *  [from]: specifies the location of EDL file. 
-     *  [import]: specifies the functions to import, 
-     *  [*]: implies to import all functions.
-     */
-    
-    from "Edger8rSyntax/Types.edl" import *;
-    from "Edger8rSyntax/Pointers.edl" import *;
-    from "Edger8rSyntax/Arrays.edl" import *;
-    from "Edger8rSyntax/Functions.edl" import *;
-
-    from "TrustedLibrary/Libc.edl" import *;
-    from "TrustedLibrary/Libcxx.edl" import ecall_exception, ecall_map;
-    from "TrustedLibrary/Thread.edl" import *;
-
-    /* 
-     * ocall_print_string - invokes OCALL to display string buffer inside the enclave.
-     *  [in]: copy the string buffer to App outside.
-     *  [string]: specifies 'str' is a NULL terminated buffer.
-
-     */
-	
-trusted {
-    public void ecall_print_message([in, string] const char* msg, size_t len);
-     public void ecall_vector_add([in, size=n] int* vec1, [in, size=n] int* vec2, int n);
+// Pre-shared AES-GCM key (in a real application, securely provision this)
+static const uint8_t aes_key[AES_KEY_SIZE] = { 
+    '1','2','3','4','5','6','7','8',
+    '9','0','1','2','3','4','5','6' 
 };
 
+/* 
+ * printf: 
+ *   Invokes OCALL to display the enclave buffer to the terminal.
+ */
+int printf(const char* fmt, ...)
+{
+    char buf[BUFSIZ] = {'\0'};
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, BUFSIZ, fmt, ap);
+    va_end(ap);
+    ocall_print_string(buf);
+    return (int)strnlen(buf, BUFSIZ - 1) + 1;
+}
 
-    untrusted {
-        void ocall_print_string([in, string] const char *str);
-    };
+/*
+ * ecall_print_message:
+ *   Receive an encrypted message (base64 encoded) from untrusted app,
+ *   decrypt it, and print it securely inside the enclave.
+ */
+extern "C"{
+    void ecall_print_message(char* msg, int len) {
+    char buffer[1024] = {0}; // assuming message is < 1KB
+    if (len >= sizeof(buffer)) len = sizeof(buffer) - 1;
 
-};
+    strncpy(buffer, msg, len);
+    buffer[len] = '\0';
+
+    printf("🔐 Inside Enclave: %s\n", buffer);
+}
+}

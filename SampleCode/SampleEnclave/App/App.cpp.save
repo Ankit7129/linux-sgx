@@ -29,10 +29,9 @@
  *
  */
 
-#include <iostream>
-#include <fstream>
-#include <vector>
+
 #include <stdio.h>
+
 #include <string.h>
 #include <assert.h>
 
@@ -43,9 +42,6 @@
 #include "sgx_urts.h"
 #include "App.h"
 #include "Enclave_u.h"
-
-
-#define ENCLAVE_FILE "enclave.signed.so"
 
 /* Global EID shared by multiple threads */
 sgx_enclave_id_t global_eid = 0;
@@ -183,70 +179,8 @@ void ocall_print_string(const char *str)
     /* Proxy/Bridge will check the length and null-terminate 
      * the input string to prevent buffer overflow. 
      */
-  printf("%s", str);
+    printf("%s", str);
 }
-
-// ───────────────────────────────────────────────────────────
-// ✅ New helper function to read hello.txt and call enclave
-void read_hello_file_and_send_to_sgx() {
-    std::ifstream file("/home/ankit/data/hello.txt");
-    if (!file.is_open()) {
-        std::cerr << "❌ Failed to open hello.txt" << std::endl;
-        return;
-    }
-
-    std::string content((std::istreambuf_iterator<char>(file)),
-                         std::istreambuf_iterator<char>());
-    file.close();
-
-    sgx_status_t status = ecall_print_message(global_eid,
-                                const_cast<char*>(content.c_str()),
-                                static_cast<int>(content.length()));
-
-    if (status != SGX_SUCCESS) {
-        std::cerr << "❌ SGX call failed!" << std::endl;
-    } else {
-        std::cout << "✅ Message sent to enclave: \"" << content << "\"" << std::endl;
-    }
-}
-// ───────────────────────────────────────────────────────────
-
-
-void load_vectors_and_send_to_sgx() {
-    const int VECTOR_SIZE = 100;
-    std::vector<int> vec1, vec2;
-    std::ifstream file1("/home/ankit/data/vector1.txt");
-    std::ifstream file2("/home/ankit/data/vector2.txt");
-
-    if (!file1.is_open() || !file2.is_open()) {
-        std::cerr << "❌ Failed to open one of the vector files" << std::endl;
-        return;
-    }
-
-    int num;
-    while (file1 >> num && vec1.size() < VECTOR_SIZE)
-        vec1.push_back(num);
-
-    while (file2 >> num && vec2.size() < VECTOR_SIZE)
-        vec2.push_back(num);
-
-    file1.close();
-    file2.close();
-
-    if (vec1.size() != VECTOR_SIZE || vec2.size() != VECTOR_SIZE) {
-        std::cerr << "❌ Vectors are not of size 1000" << std::endl;
-        return;
-    }
-
-    sgx_status_t status = ecall_vector_add(global_eid, vec1.data(), vec2.data(), VECTOR_SIZE);
-    if (status != SGX_SUCCESS) {
-        std::cerr << "❌ SGX call failed" << std::endl;
-    } else {
-        std::cout << "✅ Vector addition completed inside SGX enclave" << std::endl;
-    }
-}
-
-
 
 
 /* Application entry */
@@ -264,22 +198,15 @@ int SGX_CDECL main(int argc, char *argv[])
     }
  
     /* Utilize edger8r attributes */
-  //  edger8r_array_attributes();
-   // edger8r_pointer_attributes();
-   // edger8r_type_attributes();
-   // edger8r_function_attributes();
+    edger8r_array_attributes();
+    edger8r_pointer_attributes();
+    edger8r_type_attributes();
+    edger8r_function_attributes();
     
     /* Utilize trusted libraries */
     ecall_libc_functions();
     ecall_libcxx_functions();
-
-
     ecall_thread_functions();
-
-    // ✅ Call the new SGX message print function
-    //read_hello_file_and_send_to_sgx();
-    load_vectors_and_send_to_sgx();
-
 
     /* Destroy the enclave */
     sgx_destroy_enclave(global_eid);

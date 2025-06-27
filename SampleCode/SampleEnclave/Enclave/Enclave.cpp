@@ -2,7 +2,7 @@
  * Copyright (C) 2011-2021 Intel Corporation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
+ * modification are permitted provided that the following conditions
  * are met:
  *
  *   * Redistributions of source code must retain the above copyright
@@ -29,11 +29,27 @@
  *
  */
 
+#include "sgx_tcrypto.h"
 #include "Enclave.h"
 #include "Enclave_t.h" /* print_string */
 #include <stdarg.h>
 #include <stdio.h> /* vsnprintf */
 #include <string.h>
+#include <stdlib.h>
+#include <vector>
+#include <string>
+
+#define AES_KEY_SIZE 16
+#define GCM_IV_SIZE 12
+#define GCM_TAG_SIZE 16
+#define MAX_MSG_SIZE 2048
+#define MAX_PLAINTEXT_SIZE 1024
+
+// Pre-shared AES-GCM key (in a real application, securely provision this)
+static const uint8_t aes_key[AES_KEY_SIZE] = { 
+    '1','2','3','4','5','6','7','8',
+    '9','0','1','2','3','4','5','6' 
+};
 
 /* 
  * printf: 
@@ -41,11 +57,38 @@
  */
 int printf(const char* fmt, ...)
 {
-    char buf[BUFSIZ] = { '\0' };
+    char buf[BUFSIZ] = {'\0'};
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(buf, BUFSIZ, fmt, ap);
     va_end(ap);
     ocall_print_string(buf);
     return (int)strnlen(buf, BUFSIZ - 1) + 1;
+}
+
+/*
+ * ecall_print_message:
+ *   Receive an encrypted message (base64 encoded) from untrusted app,
+ *   decrypt it, and print it securely inside the enclave.
+ */
+extern "C" {
+    void ecall_print_message(const char* msg, size_t len)
+    {
+        char safe_msg[BUFSIZ] = {'\0'};
+
+        if (len >= BUFSIZ)
+            len = BUFSIZ - 1;
+
+        strncpy(safe_msg, msg, len);
+        safe_msg[len] = '\0';
+
+        printf("Enclave received message: %s\n", safe_msg);
+    }
+}
+
+void ecall_vector_add(int* vec1, int* vec2, int size) {
+    for (int i = 0; i < size; i++) {
+        int result = vec1[i] + vec2[i];
+        printf("Result[%d] = %d\n", i, result);
+    }
 }

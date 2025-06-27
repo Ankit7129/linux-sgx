@@ -57,10 +57,9 @@ enclave {
 
      */
 	
-trusted {
-    public void ecall_print_message([in, string] const char* msg, size_t len);
-     public void ecall_vector_add([in, size=n] int* vec1, [in, size=n] int* vec2, int n);
-};
+	trusted {
+    		public void ecall_print_message([in, string] const char* msg, size_t len);
+	};
 
 
     untrusted {
