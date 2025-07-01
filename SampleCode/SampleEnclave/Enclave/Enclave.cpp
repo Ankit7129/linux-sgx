@@ -38,6 +38,9 @@
 #include <stdlib.h>
 #include <vector>
 #include <string>
+#include <mbedtls/aes.h>
+#include <cstdio>
+
 
 #define AES_KEY_SIZE 16
 #define GCM_IV_SIZE 12
@@ -45,11 +48,7 @@
 #define MAX_MSG_SIZE 2048
 #define MAX_PLAINTEXT_SIZE 1024
 
-// Pre-shared AES-GCM key (in a real application, securely provision this)
-static const uint8_t aes_key[AES_KEY_SIZE] = { 
-    '1','2','3','4','5','6','7','8',
-    '9','0','1','2','3','4','5','6' 
-};
+
 
 /* 
  * printf: 
@@ -66,29 +65,41 @@ int printf(const char* fmt, ...)
     return (int)strnlen(buf, BUFSIZ - 1) + 1;
 }
 
+
 /*
  * ecall_print_message:
  *   Receive an encrypted message (base64 encoded) from untrusted app,
  *   decrypt it, and print it securely inside the enclave.
  */
-extern "C" {
-    void ecall_print_message(const char* msg, size_t len)
-    {
-        char safe_msg[BUFSIZ] = {'\0'};
 
-        if (len >= BUFSIZ)
-            len = BUFSIZ - 1;
 
-        strncpy(safe_msg, msg, len);
-        safe_msg[len] = '\0';
 
-        printf("Enclave received message: %s\n", safe_msg);
-    }
+
+
+void ecall_process_file(uint8_t* file_data, size_t len) {
+    // Just print the file data as a string here (make sure it's null terminated if text)
+    printf("Data received in enclave (%zu bytes):\n", len);
+    for (size_t i = 0; i < len; i++) {
+    printf("%c", file_data[i]);
 }
 
-void ecall_vector_add(int* vec1, int* vec2, int size) {
-    for (int i = 0; i < size; i++) {
-        int result = vec1[i] + vec2[i];
-        printf("Result[%d] = %d\n", i, result);
-    }
+    printf("\n");
+}
+
+
+void ecall_add_vectors(uint8_t* vec1, uint8_t* vec2, size_t len) {
+    printf("🔹 Vector 1: ");
+    for (size_t i = 0; i < len; ++i)
+        printf("%d ", vec1[i]);
+    printf("\n");
+
+    printf("🔹 Vector 2: ");
+    for (size_t i = 0; i < len; ++i)
+        printf("%d ", vec2[i]);
+    printf("\n");
+
+    printf("➕ Sum: ");
+    for (size_t i = 0; i < len; ++i)
+        printf("%d ", static_cast<uint8_t>(vec1[i] + vec2[i]));
+    printf("\n");
 }

@@ -23,3 +23,6 @@
 [submodule "external/cbor/libcbor"]
 	path = external/cbor/libcbor
 	url = https://github.com/PJK/libcbor.git
+[submodule "external/cbor/sgx_libcbor"]
+	path = external/cbor/sgx_libcbor
+	url = https://github.com/PJK/libcbor
