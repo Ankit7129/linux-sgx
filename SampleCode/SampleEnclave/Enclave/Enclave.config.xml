@@ -1,9 +1,10 @@
 <EnclaveConfiguration>
   <ProdID>0</ProdID>
   <ISVSVN>0</ISVSVN>
-  <HeapMaxSize>0x4000000</HeapMaxSize> <!-- 1000000 = 16MB -->
-  <StackMaxSize>0x100000</StackMaxSize> <!-- 4MB -->
-  <TCSNum>4</TCSNum>
+  <HeapMaxSize>0x8000000</HeapMaxSize>  <!-- 128MB -->
+<StackMaxSize>0x800000</StackMaxSize> <!-- 8MB -->
+<TCSNum>8</TCSNum>
+
   <TCSPolicy>1</TCSPolicy>
   <DisableDebug>0</DisableDebug>
   <MiscSelect>0</MiscSelect>  <!-- Enable SGXv2 dynamic allocation -->

@@ -401,8 +401,9 @@ void ecall_start_vector_load_size_test() {
 
 
 
-#define MAX_CHUNK_SIZE 5000000  // 1MB
+#define MAX_CHUNK_SIZE 1000000  // 1MB
 #define PRINT_BYTES 20          // Number of bytes to print for testing
+#define CHUNKS_PER_BATCH 132  
 
 void ecall_start_vector_load() {
     const size_t NONCE_SIZE = 12;
@@ -428,20 +429,15 @@ void ecall_start_vector_load() {
     size_t chunk_count = 0;
     size_t total_hits = 0;
     size_t batch_number = 0;
-    size_t dynamic_n_fragments = 0;
     size_t total_chunks_expected = (file_size + ENCRYPTED_CHUNK_SIZE - 1) / ENCRYPTED_CHUNK_SIZE;
 
     while (offset < file_size) {
         batch_number++;
-        printf("\n================ 🧱 Batch %zu ================\n", batch_number);
+        //printf("\n================ 🧱 Batch %zu ================\n", batch_number);
 
         size_t remaining = file_size - offset;
-        size_t chunks_this_batch = (batch_number == 1)
-            ? (remaining + ENCRYPTED_CHUNK_SIZE - 1) / ENCRYPTED_CHUNK_SIZE
-            : dynamic_n_fragments;
-
-        if (batch_number == 1)
-            printf("⚡ Determining EPC capacity with initial batch size: %zu\n", chunks_this_batch);
+        size_t chunks_this_batch = (remaining + ENCRYPTED_CHUNK_SIZE - 1) / ENCRYPTED_CHUNK_SIZE;
+        if (chunks_this_batch > CHUNKS_PER_BATCH) chunks_this_batch = CHUNKS_PER_BATCH;
 
         uint8_t** enc_chunks = (uint8_t**) malloc(chunks_this_batch * sizeof(uint8_t*));
         size_t* actual_sizes = (size_t*) malloc(chunks_this_batch * sizeof(size_t));
@@ -479,11 +475,6 @@ void ecall_start_vector_load() {
             offset += read_size;
             chunk_success[i] = true;
             successful_loads++;
-        }
-
-        if (batch_number == 1 && successful_loads > 0) {
-            dynamic_n_fragments = successful_loads;
-            printf("🔍 Determined EPC capacity: %zu chunks per batch\n", dynamic_n_fragments);
         }
 
         for (size_t i = 0; i < chunks_this_batch; i++) {
@@ -584,7 +575,6 @@ void ecall_start_vector_load() {
         total_search += search_times_us[i];
     }
 
-    // Final check
     if (offset != file_size) {
         printf("⚠️ Incomplete file processed! Final offset = %zu, expected = %zu\n", offset, file_size);
     }
@@ -598,9 +588,8 @@ void ecall_start_vector_load() {
     printf("📁 File Size: %s\n", human_readable_size(file_size));
     printf("🧩 Total Chunks Processed: %zu\n", chunk_count);
     printf("🧩 Each Chunk Size: %zu\n", MAX_CHUNK_SIZE);
-    printf("🧩 Determined EPC Capacity: %zu chunks per batch\n", dynamic_n_fragments);
-    size_t total_used = dynamic_n_fragments * MAX_CHUNK_SIZE;
-    printf("🧩 Total SGX potential used (Approx): %s\n", human_readable_size(total_used));
+    printf("🧩 Fixed Chunks per Batch: %d\n", CHUNKS_PER_BATCH);
+    printf("🧩 Total SGX potential used (Approx): %s\n", human_readable_size(CHUNKS_PER_BATCH * MAX_CHUNK_SIZE));
     printf("🧱 Batches Processed: %zu\n", batch_number);
     printf("🔐 AES-GCM Key: %s\n", key_loaded ? "LOADED ✅" : "NOT LOADED ❌");
     printf("🔍 Total Matches for [%u]: %zu\n", TARGET, total_hits);
@@ -609,6 +598,8 @@ void ecall_start_vector_load() {
     printf("🔐 Total Decrypt Time:  %ld µs (%.2f ms)\n", total_decrypt, total_decrypt / 1000.0);
     printf("🔍 Total Search Time:   %ld µs (%.2f ms)\n", total_search, total_search / 1000.0);
 
+
+    
     // Optional JSON logging (unchanged logic)
     char clean_file_size_str[64];
     double file_size_mb = static_cast<double>(file_size) / (1024.0 * 1024.0);
@@ -617,7 +608,8 @@ void ecall_start_vector_load() {
         if (!isprint(clean_file_size_str[i])) clean_file_size_str[i] = '?';
 
     std::string chunk_size_str = human_readable_size(MAX_CHUNK_SIZE);
-    std::string sgx_potential_size_str = human_readable_size(total_used);
+    int sgx_potential_use= CHUNKS_PER_BATCH * MAX_CHUNK_SIZE;
+    std::string sgx_potential_use_size_str = human_readable_size(sgx_potential_use);
 
     char summary_json_buf[4096];
     snprintf(summary_json_buf, sizeof(summary_json_buf),
@@ -626,7 +618,7 @@ void ecall_start_vector_load() {
         "\"total_chunks\": %zu, "
         "\"each_chunk_size\": \"%s\", "
         "\"batches\": %zu, "
-        "\"chunks_per_batch\": %.1f, "
+        "\"chunks_per_batch\": %d, "
         "\"target_value\": %u, "
         "\"total_matches\": %zu, "
         "\"total_elapsed_time_ms\": %.2f, "
@@ -641,7 +633,7 @@ void ecall_start_vector_load() {
         chunk_count,
         chunk_size_str.c_str(),
         batch_number,
-        (float)dynamic_n_fragments,
+        CHUNKS_PER_BATCH,
         TARGET,
         total_hits,
         total_time_us / 1000.0,
@@ -649,12 +641,14 @@ void ecall_start_vector_load() {
         total_decrypt / 1000.0,
         total_search / 1000.0,
         "CONFIGURED",  // update if dynamic
-        sgx_potential_size_str.c_str(),
+        sgx_potential_use_size_str.c_str(),
         "Process completed successfully"
     );
 
     ocall_log_json(summary_json_buf);
 }
+
+
 
 void ecall_SGX_Memory_Analysis() {
     // 1. Find maximum contiguous block
