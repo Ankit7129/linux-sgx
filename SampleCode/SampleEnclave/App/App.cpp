@@ -1,125 +1,197 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
-#include <stdio.h>
-#include <string.h>
-#include <assert.h>
-#include <unistd.h>
-#include <pwd.h>
-#define MAX_PATH FILENAME_MAX
-
-#include "sgx_urts.h"
-#include "App.h"
+#include <chrono>
+#include <sstream>
+#include <functional>
+#include <sgx_urts.h>
 #include "Enclave_u.h"
+#include <ctime>
+#include <unistd.h>
+#include <sys/utsname.h>
+#include <iomanip>
+#include <cstdlib>
 
 #define ENCLAVE_FILE "enclave.signed.so"
 
-/* Global EID shared by multiple threads */
 sgx_enclave_id_t global_eid = 0;
+const std::string vec_path = "/home/ankit/data/vector1.enc";
+std::vector<uint8_t> global_data;
 
-/* SGX error handling */
-void print_sgx_error(sgx_status_t ret) {
-    switch (ret) {
-        case SGX_ERROR_ENCLAVE_LOST:       std::cerr << "SGX_ERROR_ENCLAVE_LOST"; break;
-        case SGX_ERROR_INVALID_PARAMETER:  std::cerr << "SGX_ERROR_INVALID_PARAMETER"; break;
-        case SGX_ERROR_OUT_OF_MEMORY:      std::cerr << "SGX_ERROR_OUT_OF_MEMORY"; break;
-        case SGX_ERROR_UNEXPECTED:        std::cerr << "SGX_ERROR_UNEXPECTED"; break;
-        case SGX_ERROR_INVALID_ENCLAVE:    std::cerr << "SGX_ERROR_INVALID_ENCLAVE"; break;
-        case SGX_ERROR_INVALID_ENCLAVE_ID: std::cerr << "SGX_ERROR_INVALID_ENCLAVE_ID"; break;
-        case SGX_ERROR_INVALID_VERSION:   std::cerr << "SGX_ERROR_INVALID_VERSION"; break;
-        case SGX_ERROR_MEMORY_MAP_FAILURE: std::cerr << "SGX_ERROR_MEMORY_MAP_FAILURE"; break;
-        default: std::cerr << "Unknown SGX error: 0x" << std::hex << ret; break;
+// Note time 
+
+
+void ocall_get_time_micro(long* time_in_us) {
+    auto now = std::chrono::high_resolution_clock::now();
+    auto us = std::chrono::duration_cast<std::chrono::microseconds>(
+        now.time_since_epoch()).count();
+    *time_in_us = us;
+}
+
+void ocall_log_json(const char* json_str) {
+    // Step 1: Save JSON string to summary_ms.json
+    const char* path = "/home/ankit/data/summary_ms.json";
+    std::ofstream out(path);
+    if (out.is_open()) {
+        out << json_str;
+        out.close();
+        printf("📄 JSON Summary (ms) saved to %s ✅\n", path);
+    } else {
+        printf("❌ Failed to open %s for writing.\n", path);
+        return;
+    }
+
+    // Step 2: Optionally call Python for summary processing (optional)
+    std::string json_arg = std::string(json_str);
+    size_t pos = 0;
+    while ((pos = json_arg.find('\'', pos)) != std::string::npos) {
+        json_arg.replace(pos, 1, "'\"'\"'");
+        pos += 5;
+    }
+
+    std::string cmd = "python3 /home/ankit/utils/log_combined_report.py '" + json_arg + "'";
+    int ret = std::system(cmd.c_str());
+    if (ret != 0) {
+        printf("⚠️ Python summary script failed with code %d.\n", ret);
+    } else {
+        printf("✅ Python summary script executed successfully.\n");
     }
 }
 
-/* Initialize the enclave */
-int initialize_enclave(void) {
-    sgx_status_t ret = SGX_ERROR_UNEXPECTED;
-    
-    ret = sgx_create_enclave(ENCLAVE_FILE, SGX_DEBUG_FLAG, NULL, NULL, &global_eid, NULL);
-    if (ret != SGX_SUCCESS) {
-        std::cerr << "❌ Enclave creation failed: ";
-        print_sgx_error(ret);
-        std::cerr << std::endl;
-        return -1;
+// ✨ Reads key file into byte vector
+std::vector<uint8_t> read_file(const char* path) {
+    std::ifstream file(path, std::ios::binary);
+    return std::vector<uint8_t>((std::istreambuf_iterator<char>(file)), {});
+}
+
+// ✅ Preload AES key into enclave
+bool preload_key(const std::string& key_path) {
+    auto key_data = read_file(key_path.c_str());
+    if (key_data.size() != 16) {
+        std::cerr << "❌ AES key must be 16 bytes\n";
+        return false;
     }
 
+    sgx_status_t status;
+    sgx_status_t ret = ecall_preload_key_into_enclave(global_eid, &status, key_data.data(), 16);
+    if (ret != SGX_SUCCESS || status != SGX_SUCCESS) {
+        std::cerr << "❌ Failed to preload key into enclave\n";
+        return false;
+    }
+
+    std::cout << "✅ AES-GCM key preloaded into enclave successfully\n";
+    return true;
+}
+
+void ocall_print_string(const char* str) {
+    std::printf("%s", str);
+}
+
+void print_error_message(sgx_status_t ret) {
+    std::cerr << "SGX error: 0x" << std::hex << ret << std::endl;
+}
+
+int initialize_enclave() {
+    sgx_status_t ret = sgx_create_enclave(
+        ENCLAVE_FILE, SGX_DEBUG_FLAG, nullptr, nullptr, &global_eid, nullptr);
+    if (ret != SGX_SUCCESS) {
+        print_error_message(ret);
+        return -1;
+    }
     return 0;
 }
 
-/* OCall functions */
-void ocall_print_string(const char *str) {
-    printf("%s", str);
-}
-void read_hello_file_and_send_to_sgx() {
-    const char* filepath = "/home/ankit/data/vector2.txt";
-    std::ifstream infile(filepath, std::ios::binary);
-    if (!infile) {
-        std::cerr << "Error: Cannot open file " << filepath << std::endl;
+void ocall_get_file_info(size_t* file_size) {
+    std::ifstream file(vec_path, std::ios::binary | std::ios::ate);
+    if (!file) {
+        std::cerr << "❌ Could not open file\n";
+        *file_size = 0;
         return;
     }
+    *file_size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    global_data.resize(*file_size);
+    file.read(reinterpret_cast<char*>(global_data.data()), *file_size);
+    std::cout << "📁 File to preloaded: " << *file_size << " bytes\n";
+}
 
-    std::vector<uint8_t> file_data((std::istreambuf_iterator<char>(infile)),
-                                   std::istreambuf_iterator<char>());
-    infile.close();
-
-    sgx_status_t ret = ecall_process_file(global_eid, file_data.data(), file_data.size());
-    if (ret != SGX_SUCCESS) {
-        std::cerr << "ECALL failed with error: " << std::hex << ret << std::endl;
+void ocall_read_chunk(uint8_t* buffer, size_t buf_size, size_t offset) {
+    if (offset + buf_size > global_data.size()) {
+        std::cerr << "❌ Invalid read: offset=" << offset << " size=" << buf_size << "\n";
+        return;
     }
+    memcpy(buffer, global_data.data() + offset, buf_size);
 }
 
 
-void load_vectors_and_add_in_sgx() {
-    const char* path1 = "/home/ankit/data/vector1.txt";
-    const char* path2 = "/home/ankit/data/vector2.txt";
 
-    std::ifstream file1(path1), file2(path2);
-    if (!file1 || !file2) {
-        std::cerr << "❌ Failed to open one or both vector files.\n";
-        return;
+void run_enclave_memory_tests() {
+    sgx_status_t status;
+    printf("🔍 Testing heap allocation in enclave...\n");
+    status = ecall_test_heap_allocation(global_eid);
+    if (status != SGX_SUCCESS) {
+        printf("❌ ecall_test_heap_allocation failed (0x%x)\n", status);
     }
 
-    std::vector<uint8_t> vec1, vec2;
-    int val;
+   /* printf("🔍 Testing max chunk allocation in enclave...\n");
+    status = ecall_test_max_chunk_buffer(global_eid);
+    if (status != SGX_SUCCESS) {
+        printf("❌ ecall_test_max_chunk_buffer failed (0x%x)\n", status);
+    }*/
+}
 
-    while (file1 >> val) vec1.push_back(static_cast<uint8_t>(val));
-    while (file2 >> val) vec2.push_back(static_cast<uint8_t>(val));
 
-    file1.close(); file2.close();
+FILE* plain_file = nullptr;
 
-    if (vec1.size() != vec2.size()) {
-        std::cerr << "❌ Vectors must be of same size!\n";
-        return;
+void ocall_write_plain_chunk(uint8_t* plaintext, size_t len, size_t offset) {
+    if (!plain_file) {
+        // Open decrypted output file once
+        plain_file = fopen("/home/ankit/data/vector1.dec.txt", "wb");
+        if (!plain_file) {
+            printf("❌ Failed to open decrypted output file\n");
+            return;
+        }
     }
 
-    sgx_status_t ret = ecall_add_vectors(global_eid, vec1.data(), vec2.data(), vec1.size());
-    if (ret != SGX_SUCCESS) {
-        std::cerr << "❌ ECALL failed: " << std::hex << ret << std::endl;
+    // Write at end (append)
+    size_t written = fwrite(plaintext, 1, len, plain_file);
+    if (written != len) {
+        printf("❌ Write error in ocall_write_plain_chunk\n");
+    }
+
+    fflush(plain_file); // optional, to flush immediately
+}
+
+// e.g., in App.cpp or OCALL file
+void ocall_get_epc_free_kb(size_t* epc_kb) {
+    *epc_kb = 0;
+    FILE* f = fopen("/sys/devices/system/node/node0/epc/epc0/free_kb", "r");
+    if (f) {
+        fscanf(f, "%zu", epc_kb);
+        fclose(f);
     }
 }
 
-int main(int argc, char *argv[]) {
-    (void)(argc);
-    (void)(argv);
+int main(int argc, char* argv[]) {
+    if (initialize_enclave() < 0) return -1;
 
-    /* Initialize the enclave */
-    if (initialize_enclave() < 0) {
-        std::cerr << "❌ Enclave initialization failed" << std::endl;
-        return -1;
+    if (argc >= 3 && std::string(argv[1]) == "preload_key") {
+        const std::string key_path = argv[2];
+        if (!preload_key(key_path)) {
+          //  sgx_destroy_enclave(global_eid);
+            return 1;
+        }
+        // Do NOT destroy enclave here so key remains loaded
     }
 
-    /* Test enclave functionality */
-    ecall_libc_functions();
-    ecall_libcxx_functions();
-    ecall_thread_functions();
-
-    /* Run our custom functions */
-   // read_hello_file_and_send_to_sgx();
-    load_vectors_and_add_in_sgx();
-   // load_vectors_and_send_to_sgx();
-    /* Cleanup */
+    // Load vector (or run other functions) inside the same enclave instance
+   ecall_start_vector_load(global_eid);
+   //ecall_SGX_Memory_Analysis(global_eid);
+    //ecall_start_vector_load_size_test(global_eid);
+     // Optionally: run_enclave_memory_tests();
+   //
+   //run_enclave_memory_tests();
+    // Destroy enclave only once all processing is done
     sgx_destroy_enclave(global_eid);
-    std::cout << "✅ Enclave operations completed successfully" << std::endl;
     return 0;
 }

@@ -1,0 +1,23 @@
+enclave {
+    include "user_types.h"
+    
+    from "Edger8rSyntax/Types.edl" import *;
+    from "Edger8rSyntax/Pointers.edl" import *;
+    from "Edger8rSyntax/Arrays.edl" import *;
+    from "Edger8rSyntax/Functions.edl" import *;
+    from "TrustedLibrary/Libc.edl" import *;
+    from "TrustedLibrary/Libcxx.edl" import ecall_exception, ecall_map;
+    from "TrustedLibrary/Thread.edl" import *;
+
+    trusted {
+        public int ecall_decrypt_and_print_range(
+            [in, size=buf_size] uint8_t* enc_buf, size_t buf_size,
+            [in, size=key_size] uint8_t* key, size_t key_size,
+            [in, size=nonce_size] uint8_t* nonce, size_t nonce_size,
+            uint64_t start_block, uint64_t end_block);
+    };
+
+    untrusted {
+        void ocall_print_string([in, string] const char *str);
+    };
+};
